@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>2048 等级盘面 · 最优走法 · 撤销</title>
+<style>
+  * { box-sizing: border-box; user-select: none; }
+  body {
+    font-family: system-ui, "Segoe UI", sans-serif;
+    background: #faf8ef; color: #776e65;
+    margin: 0; padding: 24px;
+    display: flex; justify-content: center;
+  }
+  .wrap { display: flex; gap: 32px; flex-wrap: wrap; max-width: 1020px; }
+  .left  { flex: 0 0 auto; }
+  .right { flex: 1 1 300px; min-width: 280px; }
+
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  h2 { font-size: 15px; margin: 20px 0 8px; color: #8f7a66; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 88px);
+    grid-template-rows: repeat(4, 88px);
+    gap: 10px;
+    background: #bbada0;
+    padding: 12px;
+    border-radius: 16px;
+  }
+  .cell {
+    border-radius: 10px;
+    background: #cdc1b4;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+    transition: .15s;
+  }
+  .cell input {
+    width: 70px; height: 40px;
+    border: none; background: transparent;
+    text-align: center;
+    font-size: 26px; font-weight: 800;
+    color: inherit; outline: none;
+    font-family: inherit;
+  }
+  .cell input::-webkit-outer-spin-button,
+  .cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .cell input[type=number] { -moz-appearance: textfield; }
+  .value-tag {
+    font-size: 12px; font-weight: 600; opacity: .7;
+    margin-top: -2px;
+  }
+  .lv0  { background:#cdc1b4; color:#776e65; }
+  .lv1  { background:#eee4da; color:#776e65; }
+  .lv2  { background:#ede0c8; color:#776e65; }
+  .lv3  { background:#f2b179; color:#f9f6f2; }
+  .lv4  { background:#f59563; color:#f9f6f2; }
+  .lv5  { background:#f67c5f; color:#f9f6f2; }
+  .lv6  { background:#f65e3b; color:#f9f6f2; }
+  .lv7  { background:#edcf72; color:#f9f6f2; }
+  .lv8  { background:#edcc61; color:#f9f6f2; }
+  .lv9  { background:#edc850; color:#f9f6f2; }
+  .lv10 { background:#edc53f; color:#f9f6f2; }
+  .lv11 { background:#edc22e; color:#f9f6f2; }
+
+  .hint-card {
+    background: #fff; border: 2px solid #bbada0;
+    border-radius: 16px; padding: 20px; margin-bottom: 16px;
+    text-align: center;
+  }
+  .hint-big {
+    font-size: 64px; line-height: 1;
+    font-weight: 800; color: #edc22e;
+    text-shadow: 2px 2px 0 #bbada0;
+  }
+  .hint-name { font-size: 20px; font-weight: 700; margin-top: 6px; }
+  .hint-sub  { font-size: 13px; color: #8f7a66; margin-top: 8px; }
+
+  .rank-list { list-style: none; padding: 0; margin: 0; }
+  .rank-list li {
+    display: flex; justify-content: space-between;
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 6px;
+    background: #f5f1eb; font-size: 14px;
+  }
+  .rank-list li.best { background: #edc22e; color:#776e65; font-weight: 800; }
+  .rank-list .dir { font-weight: 700; }
+  .rank-list .sc  { font-variant-numeric: tabular-nums; }
+
+  .btn {
+    background: #8f7a66; color: #f9f6f2; border: none;
+    padding: 10px 18px; border-radius: 30px;
+    font-weight: 700; font-size: 14px; cursor: pointer;
+    box-shadow: 0 4px 0 #6b5a4b; margin: 4px 4px 0 0;
+    font-family: inherit;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #6b5a4b; }
+  .btn.primary { background: #edc22e; color: #776e65; box-shadow: 0 4px 0 #c9a62b; }
+  .btn.primary:active { box-shadow: 0 2px 0 #c9a62b; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: 0 4px 0 #6b5a4b; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .controls .btn {
+    padding: 14px 0; font-size: 20px; margin: 0;
+    text-align: center;
+  }
+  .controls .up    { grid-column: 2; }
+  .controls .left  { grid-column: 1; grid-row: 2; }
+  .controls .down  { grid-column: 2; grid-row: 2; }
+  .controls .right { grid-column: 3; grid-row: 2; }
+
+  .score-row {
+    display: flex; gap: 12px; margin-bottom: 12px;
+  }
+  .score-box {
+    flex: 1; background: #bbada0; color: #f9f6f2;
+    border-radius: 12px; padding: 10px 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 700;
+  }
+  .score-box span:last-child { font-size: 20px; }
+
+  .tip { font-size: 12px; color: #8f7a66; margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="left">
+    <h1>🧩 2048 （琦琦瞎玩版）</h1>
+    <div class="grid" id="grid"></div>
+    <div class="tip">
+      · 格子中只填<b>等级</b>：1 ~ 11，空格填 0 或留空。<br>
+      · 等级下方小字显示对应数值：1级 → (2)，2级 → (4)…11级 → (2048)。<br>
+      · <b>11 级为最高</b>，两个 11 级不能再合并。<br>
+      · 用方向键 / WASD / 按钮移动，不会自动生成新数字。<br>
+      · 随时改等级，提示立刻刷新。
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="score-row">
+      <div class="score-box"><span>分数</span><span id="scoreDisplay">0</span></div>
+      <div class="score-box"><span>步数</span><span id="moveDisplay">0</span></div>
+    </div>
+
+    <div class="hint-card">
+      <div class="hint-big" id="hintBig">?</div>
+      <div class="hint-name" id="hintName">等待盘面</div>
+      <div class="hint-sub" id="hintSub">在格子中输入等级</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn up"    data-dir="up">⬆️</button>
+      <button class="btn left"  data-dir="left">⬅️</button>
+      <button class="btn down"  data-dir="down">⬇️</button>
+      <button class="btn right" data-dir="right">➡️</button>
+    </div>
+    <button class="btn primary" id="autoBtn">🤖 帮我走最优一步</button>
+    <button class="btn" id="undoBtn" disabled>↩ 撤销上一步</button>
+    <button class="btn" id="clearBtn">🧹 清空棋盘</button>
+    <button class="btn" id="demoBtn">🎲 示例盘面</button>
+
+    <h2>四个方向评估排名</h2>
+    <ul class="rank-list" id="rankList"></ul>
+
+    <div class="tip">
+      · 等级 n 对应实际数值 = 2ⁿ，最高 11 级（2048）。<br>
+      · 评估综合：空格数、相邻平滑度、行列单调性、最大数位置。<br>
+      · 撤销会恢复棋盘、分数和步数。
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SIZE = 4;
+  const MAX_LEVEL = 11;          // 等级上限 11 级
+  const DIRS = {
+    up:    { dr:-1, dc:0, name:'上', arrow:'⬆️' },
+    down:  { dr: 1, dc:0, name:'下', arrow:'⬇️' },
+    left:  { dr: 0, dc:-1, name:'左', arrow:'⬅️' },
+    right: { dr: 0, dc:1, name:'右', arrow:'➡️' }
+  };
+
+  const gridEl   = document.getElementById('grid');
+  const hintBig  = document.getElementById('hintBig');
+  const hintName = document.getElementById('hintName');
+  const hintSub  = document.getElementById('hintSub');
+  const rankList = document.getElementById('rankList');
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const moveDisplay  = document.getElementById('moveDisplay');
+  const undoBtn = document.getElementById('undoBtn');
+
+  let score = 0;
+  let moveCount = 0;
+  // 历史栈：每步保存 { levelBoard, score, moveCount }
+  let history = [];
+
+  // 等级 -> 实际数值（1→2, 2→4, ..., 11→2048）
+  function levelToValue(lv) {
+    if (lv <= 0) return 0;
+    return Math.pow(2, lv);
+  }
+
+  // 建立 4x4 格子
+  const inputs = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell lv0';
+
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = 0;
+      inp.max = MAX_LEVEL;
+      inp.placeholder = '0';
+      inp.dataset.r = r;
+      inp.dataset.c = c;
+
+      const tag = document.createElement('div');
+      tag.className = 'value-tag';
+
+      cell.appendChild(inp);
+      cell.appendChild(tag);
+      gridEl.appendChild(cell);
+      inputs.push(inp);
+
+      inp.addEventListener('input', () => {
+        // 钳制到 [0, MAX_LEVEL]
+        let lv = parseInt(inp.value, 10);
+        if (isNaN(lv) || lv < 0) lv = 0;
+        if (lv > MAX_LEVEL) lv = MAX_LEVEL;
+        if (lv === 0) inp.value = '';
+        else inp.value = lv;
+        updateCellStyle(inp, cell, tag);
+        refreshHint();
+      });
+    }
+  }
+
+  function updateCellStyle(inp, cell, tag) {
+    let lv = parseInt(inp.value, 10);
+    if (isNaN(lv) || lv < 0) lv = 0;
+    if (lv > MAX_LEVEL) lv = MAX_LEVEL;
+    cell.className = 'cell lv' + Math.min(lv, MAX_LEVEL);
+    if (lv <= 0) {
+      tag.textContent = '';
+      inp.value = '';
+    } else {
+      tag.textContent = '(' + levelToValue(lv) + ')';
+    }
+  }
+
+  // 读取等级盘面
+  function readLevelBoard() {
+    const b = [];
+    for (let r = 0; r < SIZE; r++) {
+      const row = [];
+      for (let c = 0; c < SIZE; c++) {
+        const inp = inputs[r * SIZE + c];
+        let lv = parseInt(inp.value, 10);
+        if (isNaN(lv) || lv < 0) lv = 0;
+        if (lv > MAX_LEVEL) lv = MAX_LEVEL;
+        row.push(lv);
+      }
+      b.push(row);
+    }
+    return b;
+  }
+
+  function levelBoardToValue(b) {
+    return b.map(row => row.map(lv => levelToValue(lv)));
+  }
+
+  function valueBoardToLevel(b) {
+    return b.map(row => row.map(v => {
+      if (v <= 0) return 0;
+      const lv = Math.round(Math.log2(v));
+      return Math.min(lv, MAX_LEVEL);
+    }));
+  }
+
+  function writeLevelBoardToInputs(b) {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const inp = inputs[r * SIZE + c];
+        const cell = inp.parentElement;
+        const tag = cell.querySelector('.value-tag');
+        const lv = Math.min(b[r][c], MAX_LEVEL);
+        inp.value = lv > 0 ? lv : '';
+        updateCellStyle(inp, cell, tag);
+      }
+    }
+  }
+
+  function clone(b) { return b.map(row => row.slice()); }
+
+  // 数值盘面移动（不生成新数，且 11 级不能合并）
+  function moveBoard(b, dir) {
+    const nb = clone(b);
+    let moved = false, earned = 0;
+    const isVert = (dir === 'up' || dir === 'down');
+    const isRev  = (dir === 'down' || dir === 'right');
+    const maxValue = levelToValue(MAX_LEVEL); // 2048
+
+    for (let i = 0; i < SIZE; i++) {
+      let line = [];
+      for (let j = 0; j < SIZE; j++) {
+        let r, c;
+        if (isVert) { r = isRev ? SIZE-1-j : j; c = i; }
+        else        { r = i; c = isRev ? SIZE-1-j : j; }
+        line.push(nb[r][c]);
+      }
+      const nz = line.filter(v => v !== 0);
+      const merged = [];
+      for (let k = 0; k < nz.length; k++) {
+        // 只有数值 < 2048 且相邻相等才合并
+        if (k+1 < nz.length && nz[k] === nz[k+1] && nz[k] < maxValue) {
+          const s = nz[k] * 2;
+          merged.push(s);
+          earned += s;
+          k++;
+        } else {
+          merged.push(nz[k]);
+        }
+      }
+      while (merged.length < SIZE) merged.push(0);
+
+      for (let j = 0; j < SIZE; j++) {
+        let r, c;
+        if (isVert) { r = isRev ? SIZE-1-j : j; c = i; }
+        else        { r = i; c = isRev ? SIZE-1-j : j; }
+        if (nb[r][c] !== merged[j]) moved = true;
+        nb[r][c] = merged[j];
+      }
+    }
+    return { board: nb, moved, earned };
+  }
+
+  function evaluate(b) {
+    let empty = 0, maxVal = 0, maxPos = [0,0];
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const v = b[r][c];
+        if (v === 0) empty++;
+        else if (v > maxVal) { maxVal = v; maxPos = [r,c]; }
+      }
+    }
+    const lg = v => v <= 0 ? 0 : Math.log2(v);
+
+    let smooth = 0;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (b[r][c] === 0) continue;
+        const v = lg(b[r][c]);
+        if (c+1 < SIZE && b[r][c+1] !== 0) smooth -= Math.abs(v - lg(b[r][c+1]));
+        if (r+1 < SIZE && b[r+1][c] !== 0) smooth -= Math.abs(v - lg(b[r+1][c]));
+      }
+    }
+
+    let mono = 0;
+    for (let r = 0; r < SIZE; r++) {
+      let inc = 0, dec = 0;
+      for (let c = 0; c < SIZE-1; c++) {
+        const a = lg(b[r][c]), d = lg(b[r][c+1]);
+        if (a > d) inc += d - a; else dec += a - d;
+      }
+      mono += Math.max(inc, dec);
+    }
+    for (let c = 0; c < SIZE; c++) {
+      let inc = 0, dec = 0;
+      for (let r = 0; r < SIZE-1; r++) {
+        const a = lg(b[r][c]), d = lg(b[r+1][c]);
+        if (a > d) inc += d - a; else dec += a - d;
+      }
+      mono += Math.max(inc, dec);
+    }
+
+    let corner = 0;
+    if ((maxPos[0] === 0 || maxPos[0] === SIZE-1) &&
+        (maxPos[1] === 0 || maxPos[1] === SIZE-1)) {
+      corner = maxVal * 0.5;
+    } else if (maxPos[0] === 0 || maxPos[0] === SIZE-1 ||
+               maxPos[1] === 0 || maxPos[1] === SIZE-1) {
+      corner = maxVal * 0.1;
+    }
+
+    return empty * 2.7 + smooth * 0.1 + mono * 0.7 + corner * 0.3;
+  }
+
+  function analyze(valueBoard) {
+    const results = [];
+    for (const dir of Object.keys(DIRS)) {
+      const { board: nb, moved, earned } = moveBoard(valueBoard, dir);
+      let sc = -Infinity;
+      if (moved) sc = evaluate(nb) + earned * 2;
+      results.push({ dir, moved, earned, score: sc });
+    }
+    return results.filter(r => r.moved).sort((a, b) => b.score - a.score);
+  }
+
+  function refreshHint() {
+    const levelBoard = readLevelBoard();
+    const valueBoard = levelBoardToValue(levelBoard);
+    const valid = analyze(valueBoard);
+    rankList.innerHTML = '';
+
+    if (levelBoard.every(row => row.every(v => v === 0))) {
+      hintBig.textContent = '?';
+      hintName.textContent = '空盘面';
+      hintSub.textContent = '请先填入等级';
+      return null;
+    }
+
+    if (valid.length === 0) {
+      hintBig.textContent = '⛔';
+      hintName.textContent = '无路可走';
+      hintSub.textContent = '四个方向都无法移动';
+      return null;
+    }
+
+    const best = valid[0];
+    const info = DIRS[best.dir];
+    hintBig.textContent = info.arrow;
+    hintName.textContent = '推荐向' + info.name + '移动';
+    hintSub.textContent = '评估分: ' + best.score.toFixed(1) +
+      '　合并得分: +' + best.earned;
+
+    valid.forEach((r, idx) => {
+      const li = document.createElement('li');
+      if (idx === 0) li.className = 'best';
+      const i2 = DIRS[r.dir];
+      li.innerHTML =
+        `<span class="dir">${i2.arrow} ${i2.name}</span>` +
+        `<span class="sc">分 ${r.score.toFixed(1)}　+${r.earned}</span>`;
+      rankList.appendChild(li);
+    });
+    return best.dir;
+  }
+
+  // 执行移动（保存历史）
+  function playMove(dir) {
+    const levelBoard = readLevelBoard();
+    const valueBoard = levelBoardToValue(levelBoard);
+    const { board: nb, moved, earned } = moveBoard(valueBoard, dir);
+    if (!moved) return;
+
+    // 保存当前状态到历史
+    history.push({
+      levelBoard: levelBoard.map(row => row.slice()),
+      score: score,
+      moveCount: moveCount
+    });
+
+    score += earned;
+    moveCount += 1;
+    scoreDisplay.textContent = score;
+    moveDisplay.textContent = moveCount;
+
+    const newLevelBoard = valueBoardToLevel(nb);
+    writeLevelBoardToInputs(newLevelBoard);
+    refreshHint();
+    updateUndoBtn();
+  }
+
+  // 撤销
+  function undo() {
+    if (history.length === 0) return;
+    const prev = history.pop();
+    writeLevelBoardToInputs(prev.levelBoard);
+    score = prev.score;
+    moveCount = prev.moveCount;
+    scoreDisplay.textContent = score;
+    moveDisplay.textContent = moveCount;
+    refreshHint();
+    updateUndoBtn();
+  }
+
+  function updateUndoBtn() {
+    undoBtn.disabled = history.length === 0;
+  }
+
+  // 手动编辑会清空历史（因为盘面已非连续状态）
+  function clearHistory() {
+    history = [];
+    updateUndoBtn();
+  }
+
+  // ---- 事件 ----
+  document.querySelectorAll('.controls .btn').forEach(btn => {
+    btn.addEventListener('click', () => playMove(btn.dataset.dir));
+  });
+
+  document.getElementById('autoBtn').addEventListener('click', () => {
+    const best = refreshHint();
+    if (best) playMove(best);
+  });
+
+  undoBtn.addEventListener('click', undo);
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    writeLevelBoardToInputs(Array.from({length:SIZE}, () => Array(SIZE).fill(0)));
+    score = 0;
+    moveCount = 0;
+    scoreDisplay.textContent = '0';
+    moveDisplay.textContent = '0';
+    clearHistory();
+    refreshHint();
+  });
+
+  document.getElementById('demoBtn').addEventListener('click', () => {
+    const demo = [
+      [1, 2, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ];
+    writeLevelBoardToInputs(demo);
+    score = 0;
+    moveCount = 0;
+    scoreDisplay.textContent = '0';
+    moveDisplay.textContent = '0';
+    clearHistory();
+    refreshHint();
+  });
+
+  window.addEventListener('keydown', e => {
+    // Ctrl+Z 撤销
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      undo();
+      return;
+    }
+    let dir = null;
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') dir = 'up';
+    else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') dir = 'down';
+    else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') dir = 'left';
+    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') dir = 'right';
+    if (dir) { e.preventDefault(); playMove(dir); }
+  });
+
+  // 手动改格子时清空历史（避免撤销到不一致状态）
+  inputs.forEach(inp => {
+    inp.addEventListener('input', () => {
+      // 如果用户手动改了盘面，撤销栈就失去意义了，直接清空
+      // 但为了体验，不清空也可以，这里选择清空以保持一致性
+      if (history.length > 0) {
+        clearHistory();
+      }
+    });
+  });
+
+  // 初始化
+  window.addEventListener('load', () => {
+    const demo = [
+      [1, 2, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ];
+    writeLevelBoardToInputs(demo);
+    clearHistory();
+    refreshHint();
+  });
+})();
+</script>
+</body>
+</html>
